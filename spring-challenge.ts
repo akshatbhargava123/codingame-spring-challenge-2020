@@ -169,7 +169,7 @@ class GameAI {
 	calculateDistance(curPos: Position, targetPos: Position, points = 0, visited = {}): number {
 		const { grid, gridWidth, gridHeight } = this.gameState;
 
-		if (curPos.x < 0 || curPos.x >= gridWidth || curPos.x < 0 || curPos.y >= gridHeight) {
+		if (!this.isPositionValid(curPos)) {
 			return Infinity;
 		}
 
@@ -212,6 +212,8 @@ class GameAI {
 				let newVal = value;
 				if (grid[pos.y][pos.x] === GRID_ELEMENTS.PELLET) newVal += 1;
 				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.SUPER_PELLET) newVal += 10;
+				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.ENEMY) newVal -= 10;
+				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.PAC) newVal -= 10;
 
 				if (!visited[pos.y]) visited[pos.y] = {};
 				visited[pos.y][pos.x] = { pacId, value };
@@ -221,19 +223,19 @@ class GameAI {
 				const topPos = new Position(pos.x, pos.y - 1);
 				const bottomPos = new Position(pos.x, pos.y + 1);
 
-				if (grid[rightPos.y][rightPos.x] !== GRID_ELEMENTS.WALL) {
+				if (![GRID_ELEMENTS.WALL].includes(grid[rightPos.y][rightPos.x])) {
 					queue.push({ pacId, pos: rightPos, value: newVal });
 				}
 
-				if (grid[leftPos.y][leftPos.x] !== GRID_ELEMENTS.WALL) {
+				if (![GRID_ELEMENTS.WALL].includes(grid[leftPos.y][leftPos.x])) {
 					queue.push({ pacId, pos: leftPos, value: newVal });
 				}
 
-				if (grid[topPos.y][topPos.x] !== GRID_ELEMENTS.WALL) {
+				if (![GRID_ELEMENTS.WALL].includes(grid[topPos.y][topPos.x])) {
 					queue.push({ pacId, pos: topPos, value: newVal });
 				}
 
-				if (grid[bottomPos.y][bottomPos.x] !== GRID_ELEMENTS.WALL) {
+				if (![GRID_ELEMENTS.WALL].includes(grid[bottomPos.y][bottomPos.x])) {
 					queue.push({ pacId, pos: bottomPos, value: newVal });
 				}
 			}
@@ -254,7 +256,7 @@ class GameAI {
 			console.error(str);
 		}
 
-		// console.error(result);
+		console.error(result);
 		return result;
 	}
 
