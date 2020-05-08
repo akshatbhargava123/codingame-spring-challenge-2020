@@ -166,50 +166,88 @@ class GameAI {
 		}
 	}
 
-	findProfitablePellet(posX: number, posY: number, maxVal: number = 1, visited = {}): { x: number, y: number, maxVal: number } {
+	calculateDistance(curPos: Position, targetPos: Position, points = 0, visited = {}): number {
 		const { grid, gridWidth, gridHeight } = this.gameState;
 
-		if (posX < 0 || posX >= gridWidth || posY < 0 || posY >= gridHeight) {
-			return { x: posX, y: posY, maxVal: -1000 };
+		if (curPos.x < 0 || curPos.x >= gridWidth || curPos.x < 0 || curPos.y >= gridHeight) {
+			return Infinity;
 		}
 
-		if (visited[posY] && visited[posY][posX]) return { x: posX, y: posY, maxVal };
+		if (curPos.x === targetPos.x && curPos.y === targetPos.y) return points;
 
-		if (grid[posY][posX] === GRID_ELEMENTS.WALL) return { x: posX, y: posY, maxVal: -1000 };
-		if (grid[posY][posX] === GRID_ELEMENTS.SUPER_PELLET) return { x: posX, y: posY, maxVal: 10 };
+		if (visited[curPos.y] && visited[curPos.y][curPos.x]) return Infinity;
 
-		if (!visited[posY]) visited[posY] = {};
-		visited[posY][posX] = true;
+		if (grid[curPos.y][curPos.x] === GRID_ELEMENTS.WALL) return Infinity;
 
-		const right = this.findProfitablePellet(posX + 1, posY, maxVal, visited);
-		const left = this.findProfitablePellet(posX - 1, posY, maxVal, visited);
-		const top = this.findProfitablePellet(posX, posY + 1, maxVal, visited);
-		const bottom = this.findProfitablePellet(posX, posY - 1, maxVal, visited);
+		if (!visited[curPos.y]) visited[curPos.y] = {};
+		visited[curPos.y][curPos.x] = true;
 
-		let goodX, goodY;
-		if (right.maxVal > left.maxVal) {
-			goodX = right;
-		} else {
-			goodX = left;
+		const right = this.calculateDistance(new Position(curPos.x + 1, curPos.y), targetPos, points + 1, visited);
+		const left = this.calculateDistance(new Position(curPos.x - 1, curPos.y), targetPos, points + 1, visited);
+		const top = this.calculateDistance(new Position(curPos.x, curPos.y - 1), targetPos, points + 1, visited);
+		const bottom = this.calculateDistance(new Position(curPos.x, curPos.y + 1), targetPos, points + 1, visited);
+
+		return Math.min.apply(null, [right, left, top, bottom]);
+	}
+
+	isPositionValid(pos: Position) {
+		return !(pos.x < 0 || pos.x >= this.gameState.gridWidth || pos.x < 0 || pos.y >= this.gameState.gridHeight);
+	}
+
+	initDistance(pacs: Pac[]) {
+		const { grid } = this.gameState;
+		const visited: { [y: number]: { [x: number]: { pacId: number, value: number} } } = {};
+
+		const queue: { pacId: number, pos: Position, value: number }[] = [];
+		pacs.forEach(pac => queue.push({ pacId: pac.id, pos: pac.pos, value: 0 }));
+
+		while (queue.length) {
+			let positions = queue.length;
+			while (positions--) {
+				const { pacId, value, pos } = queue.shift();
+				console.error(this.isPositionValid(pos));
+				if (!this.isPositionValid(pos)) continue;
+				if (grid[pos.y][pos.x] === GRID_ELEMENTS.WALL) continue;
+				if (visited[pos.y] && visited[pos.y][pos.x]) continue;
+
+				if (!visited[pos.y]) visited[pos.y] = {};
+				visited[pos.y][pos.x] = { pacId, value };
+
+				const newVal = value + GRID_ELEMENT_SCORES[grid[pos.y][pos.x]];
+
+				queue.push({ pacId, pos: new Position(pos.x + 1, pos.y), value: newVal });
+				queue.push({ pacId, pos: new Position(pos.x - 1, pos.y), value: newVal });
+				queue.push({ pacId, pos: new Position(pos.x, pos.y + 1), value: newVal });
+				queue.push({ pacId, pos: new Position(pos.x, pos.y - 1), value: newVal });
+			}
 		}
 
-		if (top.maxVal > bottom.maxVal) {
-			goodY = top;
-		} else {
-			goodY = bottom;
+		const result: { value: number, pos: Position }[] = Array(pacs.length).fill(null);
+		console.error(visited);
+		for (let y in visited) {
+			for (let x in visited[y]) {
+				const { pacId, value } = visited[y][x];
+				if (!result[pacId]) {
+					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
+				} else if (result[pacId].value < value) {
+					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
+				}
+			}
 		}
 
-		return goodX.maxVal > goodY.maxVal ? goodX : goodY;
+		console.error(result);
 	}
 
 	playNextMove() {
 		const { myPacs, pellets } = this.gameState;
 
+		this.initDistance(myPacs);
+
 		let output = '';
 		for (let i = 0; i < myPacs.length; i++) {
 			const pac = myPacs[i];
-			const move = this.findProfitablePellet(pac.pos.x, pac.pos.y, 0, {});
-			output += `MOVE ${pac.id} ${move.x} ${move.y}`;
+
+			output += `MOVE ${pac.id} ${15} ${0}`;
 			if (i !== myPacs.length - 1) {
 				output += '|';
 			}
