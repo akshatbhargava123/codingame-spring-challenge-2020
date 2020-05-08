@@ -191,7 +191,7 @@ class GameAI {
 	}
 
 	isPositionValid(pos: Position) {
-		return !(pos.x < 0 || pos.x >= this.gameState.gridWidth || pos.x < 0 || pos.y >= this.gameState.gridHeight);
+		return !(pos.x < 0 || pos.x >= this.gameState.gridWidth || pos.y < 0 || pos.y >= this.gameState.gridHeight);
 	}
 
 	initDistance(pacs: Pac[]) {
@@ -205,27 +205,45 @@ class GameAI {
 			let positions = queue.length;
 			while (positions--) {
 				const { pacId, value, pos } = queue.shift();
-				console.error(this.isPositionValid(pos));
 				if (!this.isPositionValid(pos)) continue;
-				if (grid[pos.y][pos.x] === GRID_ELEMENTS.WALL) continue;
+
 				if (visited[pos.y] && visited[pos.y][pos.x]) continue;
+
+				let newVal = value;
+				if (grid[pos.y][pos.x] === GRID_ELEMENTS.PELLET) newVal += 1;
+				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.SUPER_PELLET) newVal += 10;
 
 				if (!visited[pos.y]) visited[pos.y] = {};
 				visited[pos.y][pos.x] = { pacId, value };
 
-				const newVal = value + GRID_ELEMENT_SCORES[grid[pos.y][pos.x]];
+				const rightPos = new Position(pos.x + 1, pos.y);
+				const leftPos = new Position(pos.x - 1, pos.y);
+				const topPos = new Position(pos.x, pos.y - 1);
+				const bottomPos = new Position(pos.x, pos.y + 1);
 
-				queue.push({ pacId, pos: new Position(pos.x + 1, pos.y), value: newVal });
-				queue.push({ pacId, pos: new Position(pos.x - 1, pos.y), value: newVal });
-				queue.push({ pacId, pos: new Position(pos.x, pos.y + 1), value: newVal });
-				queue.push({ pacId, pos: new Position(pos.x, pos.y - 1), value: newVal });
+				if (grid[rightPos.y][rightPos.x] !== GRID_ELEMENTS.WALL) {
+					queue.push({ pacId, pos: rightPos, value: newVal });
+				}
+
+				if (grid[leftPos.y][leftPos.x] !== GRID_ELEMENTS.WALL) {
+					queue.push({ pacId, pos: leftPos, value: newVal });
+				}
+
+				if (grid[topPos.y][topPos.x] !== GRID_ELEMENTS.WALL) {
+					queue.push({ pacId, pos: topPos, value: newVal });
+				}
+
+				if (grid[bottomPos.y][bottomPos.x] !== GRID_ELEMENTS.WALL) {
+					queue.push({ pacId, pos: bottomPos, value: newVal });
+				}
 			}
 		}
 
 		const result: { value: number, pos: Position }[] = Array(pacs.length).fill(null);
-		console.error(visited);
 		for (let y in visited) {
+			let str = '';
 			for (let x in visited[y]) {
+				str += visited[y][x].value + ' ';
 				const { pacId, value } = visited[y][x];
 				if (!result[pacId]) {
 					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
@@ -233,21 +251,23 @@ class GameAI {
 					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
 				}
 			}
+			console.error(str);
 		}
 
-		console.error(result);
+		// console.error(result);
+		return result;
 	}
 
 	playNextMove() {
 		const { myPacs, pellets } = this.gameState;
 
-		this.initDistance(myPacs);
+		const results = this.initDistance(myPacs);
 
 		let output = '';
 		for (let i = 0; i < myPacs.length; i++) {
 			const pac = myPacs[i];
 
-			output += `MOVE ${pac.id} ${15} ${0}`;
+			output += `MOVE ${pac.id} ${results[i].pos.x} ${results[i].pos.y}`;
 			if (i !== myPacs.length - 1) {
 				output += '|';
 			}
@@ -263,7 +283,7 @@ function RunGame() {
 
 	while (true) {
 		gameState.initGameState();
-		gameAI.debugGrid();
+		// gameAI.debugGrid();
 		gameAI.playNextMove();
 	}
 
