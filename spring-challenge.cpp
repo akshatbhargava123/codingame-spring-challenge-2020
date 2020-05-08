@@ -49,12 +49,14 @@ public:
     }
 
     void initGameState() {
+        pacs.clear();
+        enemies.clear();
+        pellets.clear();
+
         cin >> myScore >> opponentScore; cin.ignore();
 
         int visiblePacCount;
         cin >> visiblePacCount; cin.ignore();
-
-        cerr << visiblePacCount << endl;
 
         for (int i = 0; i < visiblePacCount; i++) {
             int pacId; // pac number (unique within a team)
@@ -85,7 +87,7 @@ public:
     }
 };
 
-class GameAI: private GameState {
+class GameAI {
 private:
     GameState *gameState;
 public:
@@ -94,9 +96,16 @@ public:
     }
 
     void nextMove() {
-        const vector<Pac> &pacs = this->gameState->pacs;
-        // cerr << pacs.size() << " " << this->gameState->enemies.size() << endl;
-        cout << "MOVE 0 15 0" << endl;
+        vector<Pac> &pacs = gameState->pacs;
+        vector<Pellet> &pellets = gameState->pellets;
+        sort(pellets.begin(), pellets.end(), [](Pellet p1, Pellet p2) {
+            return p1.value > p2.value;
+        });
+        for (int i = 0; i < pacs.size(); i++) {
+            cout << "MOVE " << pacs[i].pacId << " " << pellets[i].pos.x << " " << pellets[i].pos.y;
+            if (i != pacs.size() - 1) cout << "|";
+        }
+        cout << endl;
     }
 };
 
