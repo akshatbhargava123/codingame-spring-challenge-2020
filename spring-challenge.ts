@@ -9,6 +9,15 @@ const GRID_ELEMENTS = {
 	SUPER_PELLET: 'O',
 };
 
+const GRID_ELEMENT_SCORES = {
+	[GRID_ELEMENTS.EMPTY]: -1,
+	[GRID_ELEMENTS.WALL]: -1000,
+	[GRID_ELEMENTS.PAC]: -10,
+	[GRID_ELEMENTS.ENEMY]: -10,
+	[GRID_ELEMENTS.PELLET]: 1,
+	[GRID_ELEMENTS.SUPER_PELLET]: 10,
+};
+
 class Position {
 	x: number;
 	y: number;
@@ -157,15 +166,50 @@ class GameAI {
 		}
 	}
 
+	findProfitablePellet(posX: number, posY: number, maxVal: number = 1, visited = {}): { x: number, y: number, maxVal: number } {
+		const { grid, gridWidth, gridHeight } = this.gameState;
+
+		if (posX < 0 || posX >= gridWidth || posY < 0 || posY >= gridHeight) {
+			return { x: posX, y: posY, maxVal: -1000 };
+		}
+
+		if (visited[posY] && visited[posY][posX]) return { x: posX, y: posY, maxVal };
+
+		if (grid[posY][posX] === GRID_ELEMENTS.WALL) return { x: posX, y: posY, maxVal: -1000 };
+		if (grid[posY][posX] === GRID_ELEMENTS.SUPER_PELLET) return { x: posX, y: posY, maxVal: 10 };
+
+		if (!visited[posY]) visited[posY] = {};
+		visited[posY][posX] = true;
+
+		const right = this.findProfitablePellet(posX + 1, posY, maxVal, visited);
+		const left = this.findProfitablePellet(posX - 1, posY, maxVal, visited);
+		const top = this.findProfitablePellet(posX, posY + 1, maxVal, visited);
+		const bottom = this.findProfitablePellet(posX, posY - 1, maxVal, visited);
+
+		let goodX, goodY;
+		if (right.maxVal > left.maxVal) {
+			goodX = right;
+		} else {
+			goodX = left;
+		}
+
+		if (top.maxVal > bottom.maxVal) {
+			goodY = top;
+		} else {
+			goodY = bottom;
+		}
+
+		return goodX.maxVal > goodY.maxVal ? goodX : goodY;
+	}
+
 	playNextMove() {
 		const { myPacs, pellets } = this.gameState;
-		const sortedPellets = pellets.sort((p1, p2) => p1.value > p2.value ? -1 : 1);
 
 		let output = '';
 		for (let i = 0; i < myPacs.length; i++) {
 			const pac = myPacs[i];
-			const pellet = sortedPellets[i];
-			output += `MOVE ${pac.id} ${pellet.pos.x} ${pellet.pos.y}`;
+			const move = this.findProfitablePellet(pac.pos.x, pac.pos.y, 0, {});
+			output += `MOVE ${pac.id} ${move.x} ${move.y}`;
 			if (i !== myPacs.length - 1) {
 				output += '|';
 			}
