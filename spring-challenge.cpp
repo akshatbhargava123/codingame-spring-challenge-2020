@@ -8,10 +8,6 @@ using namespace std;
 struct Position {
     int x;
     int y;
-
-    int distanceTo(Position p) {
-        return abs(p.x - x) + abs(p.y - y);
-    }
 };
 
 struct Pac {
@@ -41,10 +37,10 @@ public:
 
     void initGrid() {
         cin >> WIDTH >> HEIGHT; cin.ignore();
-
         for (int i = 0; i < HEIGHT; i++) {
             string row;
             getline(cin, row); // one line of the grid: space " " is floor, pound "#" is wall
+            grid.push_back(row);
         }
     }
 
@@ -52,6 +48,7 @@ public:
         pacs.clear();
         enemies.clear();
         pellets.clear();
+        removeStateFromGrid();
 
         cin >> myScore >> opponentScore; cin.ignore();
 
@@ -68,6 +65,9 @@ public:
             int abilityCooldown; // unused in wood leagues
             cin >> pacId >> mine >> x >> y >> typeId >> speedTurnsLeft >> abilityCooldown; cin.ignore();
 
+            if (mine) grid[y][x] = '';
+            else grid[y][x] = 'E';
+
             if (mine) {
                 pacs.push_back(Pac{pacId,{x,y},typeId,speedTurnsLeft,abilityCooldown});
             } else {
@@ -83,6 +83,15 @@ public:
             int value; // amount of points this pellet is worth
             cin >> x >> y >> value; cin.ignore();
             pellets.push_back(Pellet{{x,y}, value});
+            if (grid[y][x] != 'E' && grid[y][x] != 'P') grid[y][x] = value == 10 ? 'O' : 'o';
+        }
+    }
+
+    void removeStateFromGrid() {
+        for (int i = 0; i < grid.size(); i++) {
+            for (int j = 0; j < grid[i].size(); j++) {
+                if (grid[i][j] != '#') grid[i][j] = ' ';
+            }
         }
     }
 };
@@ -93,6 +102,16 @@ private:
 public:
     GameAI(GameState *_gameState) {
         gameState = _gameState;
+    }
+
+    void debugGrid() {
+        const vector<string> grid = gameState->grid;
+        for (auto row: grid) {
+            for (char ch: row) {
+                cerr << ch << " ";
+            }
+            cerr << endl;
+        }
     }
 
     void nextMove() {
@@ -117,6 +136,7 @@ int main()
 
     while (1) {
         gameState.initGameState();
+        ai.debugGrid();
         ai.nextMove();
         // cout << "MOVE 0 15 0";
     }
