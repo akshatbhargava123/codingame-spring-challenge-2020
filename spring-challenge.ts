@@ -1,4 +1,4 @@
-const readline = () => '';
+// const readline = () => '';
 
 const Entities = {
 	EMPTY: ' ',
@@ -65,10 +65,16 @@ class Grid<T> {
 	height: number;
 	grid: T[][];
 
-	constructor(width: number, height: number) {
+	constructor(width: number, height: number, cellDefaultValue?: any) {
 		this.width = width;
 		this.height = height;
-		this.grid = new Array(height).fill(new Array(width));
+		this.grid = [];
+		for (let y = 0; y < height; y++) {
+			this.grid.push([]);
+			for (let x = 0; x < width; x++) {
+				this.grid[y].push(cellDefaultValue);
+			}
+		}
 	}
 
 	get(pos: Position): T {
@@ -96,7 +102,7 @@ class Grid<T> {
 			}
 			console.error(outputStr);
 		}
-		console.log('\n');
+		console.error('\n');
 	}
 };
 
@@ -120,12 +126,14 @@ class GameState {
 		const width = parseInt(inputs[0]);
 		const height = parseInt(inputs[1]);
 
-		this.grid = new Grid<string>(width, height);
+		this.grid = new Grid<string>(width, height, '');
+		this.universalGrid = new Grid<number>(width, height, 0);
 
 		for (let i = 0; i < height; i++) {
 			const row: string = readline();
 			this.grid.setRow(i, row.split(''));
 		}
+		console.error(inputs);
 	}
 
 	resetGridState() {
@@ -172,7 +180,7 @@ class GameState {
 			pelletInput.push({ x, y, value });
 		}
 
-		const findOrUpdatePac = (pacArray: Pac[], { pacId, x, y, typeId, speedTurnsLeft, abilityCooldown }) => {
+		const createOrUpdatePac = (pacArray: Array<Pac>, { pacId, x, y, typeId, speedTurnsLeft, abilityCooldown }) => {
 			const pacInstance = pacArray.find(pac => pac.id === pacId);
 			if (pacInstance) {
 				pacInstance.typeId = typeId;
@@ -186,14 +194,28 @@ class GameState {
 
 		pacInput.forEach(({ mine, ...pacInfo }) => {
 			if (mine) {
-				findOrUpdatePac(this.pacs, pacInfo);
+				createOrUpdatePac(this.pacs, pacInfo);
 			} else {
-				findOrUpdatePac(this.enemies, pacInfo);
+				createOrUpdatePac(this.enemies, pacInfo);
 			}
 		});
 
+		const updateDeadStatus = (pacArray: Array<Pac>, pacInput: any[]) => {
+			pacArray.forEach(pac => {
+				const found = pacInput.some(p => p.pacId === pac.id);
+				if (!found) pac.isDead = true;
+			});
+		};
+
+		updateDeadStatus(this.pacs, pacInput);
+		updateDeadStatus(this.enemies, pacInput);
+
 		this.pellets = pelletInput;
 
+		// console.error(this.pacs);
+		// console.error(this.enemies);
+		// console.error(this.pellets);
+		this.grid.debug();
 		this.updateUniversalGrid();
 	}
 
@@ -220,6 +242,8 @@ class GameState {
 					this.universalGrid.set(new Position(pac.pos.x, y), 0);
 			}
 		}
+
+		// this.universalGrid.debug();
 	}
 };
 
@@ -298,18 +322,19 @@ class GameAI {
 
 	playNextMove() {
 		const { pacs, pellets } = this.gameState;
-
-		const results = this.initDistance(pacs);
+		const alivePacs = pacs.filter(pac => !pac.isDead);
 
 		let output = '';
-		for (let i = 0; i < pacs.length; i++) {
-			const pac = pacs[i];
+		for (let i = 0; i < alivePacs.length; i++) {
+			const pac = alivePacs[i];
+			if (pac.isDead) continue;
 
-			output += `MOVE ${pac.id} ${results[i].pos.x} ${results[i].pos.y}`;
-			if (i !== pacs.length - 1) {
+			output += (`MOVE ${pac.id} 15 0`);
+			if (i !== alivePacs.length - 1) {
 				output += '|';
 			}
 		}
+
 		console.log(output);
 	}
 
