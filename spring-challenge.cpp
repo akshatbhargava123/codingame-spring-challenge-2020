@@ -70,11 +70,8 @@ public:
             {
                 if (grid[i][j] == ' ')
                     tempGrid[i][j] = 1;
-                else if (grid[i][j] == '#') {
-                    tempGrid[i][j] = -5;
-                }
                 // else if (grid[i][j] == '#')
-                //     tempGrid[i][j] = '#';
+                //     tempGrid[i][j] = 0;
             }
         }
 
@@ -101,7 +98,7 @@ public:
 
         for (Pellet pellet : pellets)
         {
-            tempGrid[pellet.pos.y][pellet.pos.x] = pellet.value == 10 ? 'O' : 'o';
+            tempGrid[pellet.pos.y][pellet.pos.x] = pellet.value == 10 ? 10 : 2;
         }
 
         universalGrid = tempGrid;
@@ -211,9 +208,10 @@ public:
         auto grid = gameState->universalGrid;
         for (auto row : grid)
         {
-            for (auto ch : row)
+            for (int ch : row)
             {
-                cerr << ch;
+                if (ch == 10) ch = 9;
+                cerr << ch << " ";
             }
             cerr << endl;
         }
@@ -245,7 +243,7 @@ int main()
     while (1)
     {
         gameState.initGameState();
-        ai.debugGrid();
+        ai.debugUniversalGrid();
         ai.nextMove();
         // cout << "MOVE 0 15 0";
     }
