@@ -32,7 +32,7 @@ public:
     int width, height;
     int myScore, opponentScore;
     vector<vector<char>> grid;
-    vector<vector<char>> universalGrid;
+    vector<vector<int>> universalGrid;
     vector<Pac> pacs, enemies;
     vector<Pellet> pellets;
 
@@ -61,39 +61,52 @@ public:
         this->grid = tempGrid;
     }
 
-    initUniversalGrid()
+    void initUniversalGrid()
     {
-        vector<vector<char>> tUniversalGrid(height, vector<char>(width, ' '));
+        vector<vector<int>> tempGrid(height, vector<int>(width, 0));
         for (int i = 0; i < height; i++)
         {
             for (int j = 0; j < width; j++)
             {
                 if (grid[i][j] == ' ')
-                    universalGrid[i][j] = 'o';
-                else if (grid[i][j] == '#')
-                    universalGrid[i][j] = '#';
+                    tempGrid[i][j] = 1;
+                else if (grid[i][j] == '#') {
+                    tempGrid[i][j] = -5;
+                }
+                // else if (grid[i][j] == '#')
+                //     tempGrid[i][j] = '#';
             }
         }
 
-        for (Pac pac : this->pacs)
+        auto initIndex = [](int posx, int posy, auto &tempGrid, auto &grid) {
+            if (grid[posy][posx] == ' ')
+                tempGrid[posy][posx] = 0;
+            else if (grid[posy][posx] == 'o')
+                tempGrid[posy][posx] = 2;
+            else if (grid[posy][posx] == 'O')
+                tempGrid[posy][posx] = 10;
+        };
+
+        for (Pac pac : pacs)
         {
             for (int x = pac.pos.x; x >= 0; x--)
-                tUniversalGrid[pac.pos.y][x] = grid[pac.pos.y][x];
+                initIndex(x, pac.pos.y, tempGrid, grid);
             for (int y = pac.pos.y; y >= 0; y--)
-                tUniversalGrid[y][pac.pos.x] = grid[y][pac.pos.x];
-
+                initIndex(pac.pos.x, y, tempGrid, grid);
             for (int x = pac.pos.x; x < width; x++)
-                tUniversalGrid[y][pac.pos.x] = grid[y][pac.pos.x];
+                initIndex(x, pac.pos.y, tempGrid, grid);
             for (int y = pac.pos.y; y < height; y++)
-                tUniversalGrid[y][pac.pos.x] = grid[y][pac.pos.x];
+                initIndex(pac.pos.x, y, tempGrid, grid);
         }
 
         for (Pellet pellet : pellets)
         {
-            universalGrid[pellet.pos.y][pellet.pos.x] = pellet.value == 10 ? 'O' : 'o';
+            tempGrid[pellet.pos.y][pellet.pos.x] = pellet.value == 10 ? 'O' : 'o';
         }
 
-        this->universalGrid = tUniversalGrid;
+        universalGrid = tempGrid;
+
+        // cerr << "universal grid initialised...\n";
     }
 
     void initGameState()
@@ -109,6 +122,8 @@ public:
         int visiblePacCount;
         cin >> visiblePacCount;
         cin.ignore();
+
+        // cerr << "basic input done...\n";
 
         for (int i = 0; i < visiblePacCount; i++)
         {
@@ -128,10 +143,12 @@ public:
             }
 
             if (mine)
-                grid[y][x] = 'P';
+                this->grid[y][x] = 'P';
             else
-                grid[y][x] = 'E';
+                this->grid[y][x] = 'E';
         }
+
+        // cerr << "pacs input done...\n";
 
         int visiblePelletCount;
         cin >> visiblePelletCount;
@@ -144,8 +161,12 @@ public:
 
             pellets.push_back(Pellet{{x, y}, value});
 
-            grid[y][x] = value == 10 ? 'O' : 'o';
+            this->grid[y][x] = value == 10 ? 'O' : 'o';
         }
+
+        // cerr << "pellets input done...\n";
+
+        this->initUniversalGrid();
     }
 
     void removeStateFromGrid()
@@ -174,10 +195,23 @@ public:
 
     void debugGrid()
     {
-        const vector<vector<char>> grid = gameState->grid;
+        auto grid = gameState->grid;
         for (auto row : grid)
         {
-            for (char ch : row)
+            for (auto ch : row)
+            {
+                cerr << ch;
+            }
+            cerr << endl;
+        }
+    }
+
+    void debugUniversalGrid()
+    {
+        auto grid = gameState->universalGrid;
+        for (auto row : grid)
+        {
+            for (auto ch : row)
             {
                 cerr << ch;
             }
