@@ -9,6 +9,10 @@ struct Position
 {
     int x;
     int y;
+
+    bool operator == (Position p) {
+        return (this->x == p.x) && (this->y == p.y);
+    }
 };
 
 struct Pac
@@ -24,6 +28,10 @@ struct Pellet
 {
     Position pos; // pellet position in grid
     int value;    // amount of points this pellet is worth
+
+    bool isSuper() {
+        return value == 10;
+    }
 };
 
 class GameState
@@ -86,13 +94,13 @@ public:
 
         for (Pac pac : pacs)
         {
-            for (int x = pac.pos.x; x >= 0; x--)
+            for (int x = pac.pos.x; x >= 0, grid[pac.pos.y][x] != '#'; x--)
                 initIndex(x, pac.pos.y, tempGrid, grid);
-            for (int y = pac.pos.y; y >= 0; y--)
+            for (int y = pac.pos.y; y >= 0, grid[y][pac.pos.x] != '#'; y--)
                 initIndex(pac.pos.x, y, tempGrid, grid);
-            for (int x = pac.pos.x; x < width; x++)
+            for (int x = pac.pos.x; x < width, grid[pac.pos.y][x] != '#'; x++)
                 initIndex(x, pac.pos.y, tempGrid, grid);
-            for (int y = pac.pos.y; y < height; y++)
+            for (int y = pac.pos.y; y < height, grid[y][pac.pos.x] != '#'; y++)
                 initIndex(pac.pos.x, y, tempGrid, grid);
         }
 
@@ -205,6 +213,7 @@ public:
 
     void debugUniversalGrid()
     {
+        // while debugging show super pellets as 9 instead of 10
         auto grid = gameState->universalGrid;
         for (auto row : grid)
         {
