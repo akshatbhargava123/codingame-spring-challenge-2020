@@ -127,13 +127,12 @@ class GameState {
 		const height = parseInt(inputs[1]);
 
 		this.grid = new Grid<string>(width, height, '');
-		this.universalGrid = new Grid<number>(width, height, 0);
+		this.universalGrid = new Grid<number>(width, height, 1);
 
 		for (let i = 0; i < height; i++) {
 			const row: string = readline();
 			this.grid.setRow(i, row.split(''));
 		}
-		console.error(inputs);
 	}
 
 	resetGridState() {
@@ -215,7 +214,7 @@ class GameState {
 		// console.error(this.pacs);
 		// console.error(this.enemies);
 		// console.error(this.pellets);
-		this.grid.debug();
+
 		this.updateUniversalGrid();
 	}
 
@@ -243,7 +242,7 @@ class GameState {
 			}
 		}
 
-		// this.universalGrid.debug();
+		this.universalGrid.debug();
 	}
 };
 
