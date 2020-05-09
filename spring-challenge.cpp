@@ -22,6 +22,10 @@ struct Pac
     string typeId;       // unused in wood leagues
     int speedTurnsLeft;  // unused in wood leagues
     int abilityCooldown; // unused in wood leagues
+
+    bool isAbilityAvailable() {
+        return abilityCooldown == 0;
+    }
 };
 
 struct Pellet
@@ -34,6 +38,7 @@ struct Pellet
     }
 };
 
+// TODO: Universal Grid cannot yet differentiate between WALL and EMPTY, maybe merge it with GRID in future
 class GameState
 {
 public:
@@ -69,6 +74,18 @@ public:
         this->grid = tempGrid;
     }
 
+    void removeStateFromGrid()
+    {
+        for (int i = 0; i < grid.size(); i++)
+        {
+            for (int j = 0; j < grid[i].size(); j++)
+            {
+                if (grid[i][j] != '#')
+                    grid[i][j] = ' ';
+            }
+        }
+    }
+
     void initUniversalGrid()
     {
         vector<vector<int>> tempGrid(height, vector<int>(width, 0));
@@ -94,13 +111,13 @@ public:
 
         for (Pac pac : pacs)
         {
-            for (int x = pac.pos.x; x >= 0, grid[pac.pos.y][x] != '#'; x--)
+            for (int x = pac.pos.x; x >= 0 && grid[pac.pos.y][x] != '#'; x--)
                 initIndex(x, pac.pos.y, tempGrid, grid);
-            for (int y = pac.pos.y; y >= 0, grid[y][pac.pos.x] != '#'; y--)
+            for (int y = pac.pos.y; y >= 0 && grid[y][pac.pos.x] != '#'; y--)
                 initIndex(pac.pos.x, y, tempGrid, grid);
-            for (int x = pac.pos.x; x < width, grid[pac.pos.y][x] != '#'; x++)
+            for (int x = pac.pos.x; x < width && grid[pac.pos.y][x] != '#'; x++)
                 initIndex(x, pac.pos.y, tempGrid, grid);
-            for (int y = pac.pos.y; y < height, grid[y][pac.pos.x] != '#'; y++)
+            for (int y = pac.pos.y; y < height && grid[y][pac.pos.x] != '#'; y++)
                 initIndex(pac.pos.x, y, tempGrid, grid);
         }
 
@@ -173,18 +190,6 @@ public:
 
         this->initUniversalGrid();
     }
-
-    void removeStateFromGrid()
-    {
-        for (int i = 0; i < grid.size(); i++)
-        {
-            for (int j = 0; j < grid[i].size(); j++)
-            {
-                if (grid[i][j] != '#')
-                    grid[i][j] = ' ';
-            }
-        }
-    }
 };
 
 class GameAI
@@ -226,6 +231,97 @@ public:
         }
     }
 
+    Position getBestMovePosition(Pac pac) {
+        const Position pos = pac.pos;
+        const int width = this->gameState->width;
+        const int height = this->gameState->height;
+
+        const auto grid = this->gameState->grid;
+        const auto universalGrid = this->gameState->universalGrid;
+        vector<vector<int>> scores(height, vector<int>(width, 0));
+        vector<vector<bool>> visited(height, vector<bool>(width, false));
+
+        auto getEntity = [=](Position pos) -> char {
+            return grid[pos.y][pos.x];
+        };
+
+        auto setScore = [&](Position pos, int value) {
+            if (scores[pos.y][pos.x] < value) scores[pos.y][pos.x] = value;
+        };
+
+        auto setVisited = [&](Position pos) {
+            visited[pos.y][pos.x] = true;
+        };
+
+        // BFS lambda to encapsulate logic
+        function<int(Position, int)> BFS = [&](Position curPos, int depth = 0) -> int {
+            // if (depth > 15) return 1;
+
+            // check if wall then return
+            if (getEntity(curPos) == '#') {
+                setVisited(curPos);
+                return -1000;
+            }
+
+            if (curPos.x < 0 || curPos.x >= width || curPos.y < 0 || curPos.y >= height) return -1000;
+
+            // initialise all direction positions correctly
+            Position tPos, bPos, rPos, lPos;
+
+            if (curPos.x == 0) lPos = Position{width - 1, curPos.y};
+            else lPos = Position{curPos.x - 1, curPos.y};
+
+            if (curPos.x == width - 1) rPos = Position{0, curPos.y};
+            else rPos = Position{curPos.x + 1, curPos.y};
+
+            if (curPos.y == 0) tPos = Position{curPos.x, height - 1};
+            else tPos = Position{curPos.x, curPos.y - 1};
+
+            if (curPos.y == height - 1) bPos = Position{curPos.x, 0};
+            else bPos = Position{curPos.x, curPos.y + 1};
+
+            // cerr << curPos.y << " " << curPos.x << "  " << universalGrid[curPos.y][curPos.x] << endl;
+
+            // TODO: think more on this: adding -1 as a cost to walk
+            int newVal = depth + universalGrid[curPos.y][curPos.x] + -1;
+            setScore(curPos, newVal);
+
+            if (visited[curPos.y][curPos.x]) return newVal;
+
+            setVisited(curPos);
+
+            int tVal = BFS(tPos, newVal);
+            int bVal = BFS(bPos, newVal);
+            int lVal = BFS(lPos, newVal);
+            int rVal = BFS(rPos, newVal);
+
+            return max({tVal, bVal, lVal, rVal});
+        };
+
+        BFS(pac.pos, 0);
+
+        int bestScore = 0;
+        Position bestPos = pac.pos;
+        cerr << pac.pacId << endl;
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                int score = scores[i][j];
+                cerr << score << " ";
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestPos = Position{j,i};
+                }
+            }
+            cerr << endl;
+        }
+
+        cerr << endl << bestScore << endl;
+        cerr << bestPos.y << " " << bestPos.x << endl;
+
+        return bestPos;
+    }
+
     void nextMove()
     {
         vector<Pac> &pacs = gameState->pacs;
@@ -235,7 +331,16 @@ public:
         });
         for (int i = 0; i < pacs.size(); i++)
         {
-            cout << "MOVE " << pacs[i].pacId << " " << pellets[i].pos.x << " " << pellets[i].pos.y;
+            Pac &pac = pacs[i];
+
+            // if SPEED ability available, just use it
+            if (pac.isAbilityAvailable()) {
+                cout << "SPEED " << pac.pacId;
+            } else {
+                Position pos = this->getBestMovePosition(pac);
+                cout << "MOVE " << pac.pacId << " " << pos.x << " " << pos.y;
+            }
+
             if (i != pacs.size() - 1)
                 cout << "|";
         }
@@ -252,8 +357,7 @@ int main()
     while (1)
     {
         gameState.initGameState();
-        ai.debugUniversalGrid();
+        // ai.debugUniversalGrid();
         ai.nextMove();
-        // cout << "MOVE 0 15 0";
     }
 }

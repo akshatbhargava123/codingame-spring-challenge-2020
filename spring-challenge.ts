@@ -59,6 +59,7 @@ class GameState {
 	gridWidth: number;
 	gridHeight: number;
 	grid: string[][] = [];
+	universalGrid: number[][] = []; // doesn't change fully on each turn
 
 	myScore: number;
 	opponentScore: number;
@@ -73,17 +74,27 @@ class GameState {
 
 	initGrid() {
 		const inputs: string[] = readline().split(' ');
-		const width = parseInt(inputs[0]); // size of the grid
-		const height = parseInt(inputs[1]); // top left corner is (x=0, y=0)
-		for (let i = 0; i < height; i++) {
-			const row: string = readline(); // one line of the grid: space " " is floor, pound "#" is wall
-			for (let j = 0; j < width; j++) {
-				if (!this.grid[i]) this.grid[i] = [];
-				this.grid[i].push(row[j]);
-			}
-		}
+		const width = parseInt(inputs[0]);
+		const height = parseInt(inputs[1]);
+
 		this.gridWidth = width;
 		this.gridHeight = height;
+		this.grid = new Array(height).fill(null);
+		this.universalGrid = new Array(height).fill(null);
+
+		for (let i = 0; i < height; i++) {
+			const row: string = readline();
+			this.grid[i] = Array.from(row);
+			// for (let j = 0; j < width; j++) {
+			// 	this.grid[i].push(row[j]);
+			// 	if (row[j] === GRID_ELEMENTS.EMPTY)
+			// 		this.universalGrid[i][j] = 1;
+			// 	else
+			// 		this.universalGrid[i][j] = 0;
+			// }
+			console.error(this.grid[i])
+		}
+		console.error('\n\n\n');
 	}
 
 	resetGridState() {
@@ -106,16 +117,16 @@ class GameState {
 		this.myScore = parseInt(initialInputs[0]);
 		this.opponentScore = parseInt(initialInputs[1]);
 
-		const visiblePacCount: number = parseInt(readline()); // all your pacs and enemy pacs in sight
+		const visiblePacCount: number = parseInt(readline());
 		for (let i = 0; i < visiblePacCount; i++) {
-			var inputs: string[] = readline().split(' ');
-			const pacId: number = parseInt(inputs[0]); // pac number (unique within a team)
-			const mine: boolean = inputs[1] !== '0'; // true if this pac is yours
-			const x: number = parseInt(inputs[2]); // position in the grid
-			const y: number = parseInt(inputs[3]); // position in the grid
-			const typeId: string = inputs[4]; // unused in wood leagues
-			const speedTurnsLeft: number = parseInt(inputs[5]); // unused in wood leagues
-			const abilityCooldown: number = parseInt(inputs[6]); // unused in wood leagues
+			const inputs: string[] = readline().split(' ');
+			const pacId: number = parseInt(inputs[0]);
+			const mine: boolean = inputs[1] !== '0';
+			const x: number = parseInt(inputs[2]);
+			const y: number = parseInt(inputs[3]);
+			const typeId: string = inputs[4];
+			const speedTurnsLeft: number = parseInt(inputs[5]);
+			const abilityCooldown: number = parseInt(inputs[6]);
 
 			const pacInstance = new Pac(pacId, new Position(x, y), typeId, speedTurnsLeft, abilityCooldown);
 
@@ -128,20 +139,49 @@ class GameState {
 			}
 		}
 
-		const visiblePelletCount: number = parseInt(readline()); // all pellets in sight
+		const visiblePelletCount: number = parseInt(readline());
 		for (let i = 0; i < visiblePelletCount; i++) {
-			var inputs: string[] = readline().split(' ');
+			const inputs: string[] = readline().split(' ');
 			const x: number = parseInt(inputs[0]);
 			const y: number = parseInt(inputs[1]);
-			const value: number = parseInt(inputs[2]); // amount of points this pellet is worth
+			const value: number = parseInt(inputs[2]);
 
 			const pelletInstance = new Pellet(new Position(x, y), value);
 			this.pellets.push(pelletInstance);
 
 			if (value === 10) {
+				this.universalGrid[y][x] = 10;
 				this.grid[y][x] = GRID_ELEMENTS.SUPER_PELLET;
 			} else {
+				this.universalGrid[y][x] = 2;
 				this.grid[y][x] = GRID_ELEMENTS.PELLET;
+			}
+		}
+
+		this.updateUniversalGrid();
+	}
+
+	updateUniversalGrid() {
+		// for each pac, go through visibility area and update grid
+		for (let pac of this.myPacs) {
+			for (let x = pac.pos.x; x < this.gridWidth; x++) {
+				if (this.grid[pac.pos.y][x] === GRID_ELEMENTS.EMPTY)
+					this.universalGrid[pac.pos.y][x] = 0;
+			}
+
+			for (let x = pac.pos.x; x >= 0; x--) {
+				if (this.grid[pac.pos.y][x] === GRID_ELEMENTS.EMPTY)
+					this.universalGrid[pac.pos.y][x] = 0;
+			}
+
+			for (let y = pac.pos.y; y < this.gridHeight; y++) {
+				if (this.grid[y][pac.pos.x] === GRID_ELEMENTS.EMPTY)
+					this.universalGrid[y][pac.pos.x] = 0;
+			}
+
+			for (let y = pac.pos.y; y >= 0; y--) {
+				if (this.grid[y][pac.pos.x] === GRID_ELEMENTS.EMPTY)
+					this.universalGrid[y][pac.pos.x] = 0;
 			}
 		}
 	}
@@ -154,40 +194,16 @@ class GameAI {
 		this.gameState = gameState;
 	}
 
-	debugGrid() {
-		const { grid, gridWidth, gridHeight } = this.gameState;
+	debugGrid(uGrid = false) {
+		const { grid, universalGrid, gridWidth, gridHeight } = this.gameState;
+		let dGrid = uGrid ? universalGrid : grid;
 		for (let i = 0; i < gridHeight; i++) {
 			let row = '';
 			for (let j = 0; j < gridWidth; j++) {
-				row += grid[i][j] + ' ';
+				row += dGrid[i][j];
 			}
-			row += ' ';
 			console.error(row);
 		}
-	}
-
-	calculateDistance(curPos: Position, targetPos: Position, points = 0, visited = {}): number {
-		const { grid, gridWidth, gridHeight } = this.gameState;
-
-		if (!this.isPositionValid(curPos)) {
-			return Infinity;
-		}
-
-		if (curPos.x === targetPos.x && curPos.y === targetPos.y) return points;
-
-		if (visited[curPos.y] && visited[curPos.y][curPos.x]) return Infinity;
-
-		if (grid[curPos.y][curPos.x] === GRID_ELEMENTS.WALL) return Infinity;
-
-		if (!visited[curPos.y]) visited[curPos.y] = {};
-		visited[curPos.y][curPos.x] = true;
-
-		const right = this.calculateDistance(new Position(curPos.x + 1, curPos.y), targetPos, points + 1, visited);
-		const left = this.calculateDistance(new Position(curPos.x - 1, curPos.y), targetPos, points + 1, visited);
-		const top = this.calculateDistance(new Position(curPos.x, curPos.y - 1), targetPos, points + 1, visited);
-		const bottom = this.calculateDistance(new Position(curPos.x, curPos.y + 1), targetPos, points + 1, visited);
-
-		return Math.min.apply(null, [right, left, top, bottom]);
 	}
 
 	isPositionValid(pos: Position) {
@@ -196,7 +212,7 @@ class GameAI {
 
 	initDistance(pacs: Pac[]) {
 		const { grid } = this.gameState;
-		const visited: { [y: number]: { [x: number]: { pacId: number, value: number} } } = {};
+		const visited: { [y: number]: { [x: number]: { pacId: number, value: number } } } = {};
 
 		const queue: { pacId: number, pos: Position, value: number }[] = [];
 		pacs.forEach(pac => queue.push({ pacId: pac.id, pos: pac.pos, value: 0 }));
@@ -285,7 +301,7 @@ function RunGame() {
 
 	while (true) {
 		gameState.initGameState();
-		// gameAI.debugGrid();
+		gameAI.debugGrid();
 		gameAI.playNextMove();
 	}
 
