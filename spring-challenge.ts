@@ -1,6 +1,6 @@
-// const readline = () => '';
+const readline = () => '';
 
-const GRID_ELEMENTS = {
+const Entities = {
 	EMPTY: ' ',
 	WALL: '#',
 	PAC: 'P',
@@ -9,13 +9,13 @@ const GRID_ELEMENTS = {
 	SUPER_PELLET: 'O',
 };
 
-const GRID_ELEMENT_SCORES = {
-	[GRID_ELEMENTS.EMPTY]: -1,
-	[GRID_ELEMENTS.WALL]: -1000,
-	[GRID_ELEMENTS.PAC]: -10,
-	[GRID_ELEMENTS.ENEMY]: -10,
-	[GRID_ELEMENTS.PELLET]: 1,
-	[GRID_ELEMENTS.SUPER_PELLET]: 10,
+const Entity_Score = {
+	[Entities.EMPTY]: -1,
+	[Entities.WALL]: -1000,
+	[Entities.PAC]: -10,
+	[Entities.ENEMY]: -10,
+	[Entities.PELLET]: 1,
+	[Entities.SUPER_PELLET]: 10,
 };
 
 class Position {
@@ -34,6 +34,7 @@ class Pac {
 	typeId: string;
 	speedTurnsLeft: number;
 	abilityCooldown: number;
+	isDead: boolean = false;
 
 	constructor(id: number, pos: Position, _typeId: string, _speedTurnsLeft: number, _abilityCooldown: number) {
 		this.id = id;
@@ -53,19 +54,61 @@ class Pellet {
 		this.pos = pos;
 		this.value = value;
 	}
+
+	isSuper() {
+		return this.value === 10;
+	}
+};
+
+class Grid<T> {
+	width: number;
+	height: number;
+	grid: T[][];
+
+	constructor(width: number, height: number) {
+		this.width = width;
+		this.height = height;
+		this.grid = new Array(height).fill(new Array(width));
+	}
+
+	get(pos: Position): T {
+		return this.grid[pos.y][pos.x];
+	}
+
+	set(pos: Position, value: T) {
+		this.grid[pos.y][pos.x] = value;
+	}
+
+	setRow(rowIndex: number, row: T[]) {
+		this.grid[rowIndex] = row;
+	}
+
+	checkBounds(pos: Position) {
+		const { width, height } = this;
+		return !(pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height);
+	}
+
+	debug() {
+		for (let row of this.grid) {
+			let outputStr = '';
+			for (let col of row) {
+				outputStr += col;
+			}
+			console.error(outputStr);
+		}
+		console.log('\n');
+	}
 };
 
 class GameState {
-	gridWidth: number;
-	gridHeight: number;
-	grid: string[][] = [];
-	universalGrid: number[][] = []; // doesn't change fully on each turn
+	grid: Grid<string>;
+	universalGrid: Grid<number>;
 
 	myScore: number;
 	opponentScore: number;
 
-	myPacs = [] as Pac[];
-	opponentPacs = [] as Pac[];
+	pacs = [] as Pac[];
+	enemies = [] as Pac[];
 	pellets = [] as Pellet[];
 
 	constructor() {
@@ -77,41 +120,29 @@ class GameState {
 		const width = parseInt(inputs[0]);
 		const height = parseInt(inputs[1]);
 
-		this.gridWidth = width;
-		this.gridHeight = height;
-		this.grid = new Array(height).fill(null);
-		this.universalGrid = new Array(height).fill(null);
+		this.grid = new Grid<string>(width, height);
 
 		for (let i = 0; i < height; i++) {
 			const row: string = readline();
-			this.grid[i] = Array.from(row);
-			// for (let j = 0; j < width; j++) {
-			// 	this.grid[i].push(row[j]);
-			// 	if (row[j] === GRID_ELEMENTS.EMPTY)
-			// 		this.universalGrid[i][j] = 1;
-			// 	else
-			// 		this.universalGrid[i][j] = 0;
-			// }
-			console.error(this.grid[i])
+			this.grid.setRow(i, row.split(''));
 		}
-		console.error('\n\n\n');
 	}
 
 	resetGridState() {
-		for (let i = 0; i < this.gridHeight; i++) {
-			for (let j = 0; j < this.gridWidth; j++) {
-				if (this.grid[i][j] !== GRID_ELEMENTS.WALL) {
-					this.grid[i][j] = GRID_ELEMENTS.EMPTY;
+		for (let y = 0; y < this.grid.height; y++) {
+			for (let x = 0; x < this.grid.width; x++) {
+				if (this.grid.get(new Position(x, y)) !== Entities.WALL) {
+					this.grid.set(new Position(x, y), Entities.EMPTY);
 				}
 			}
 		}
 	}
 
 	initGameState() {
-		this.myPacs = [];
-		this.opponentPacs = [];
-		this.pellets = [];
 		this.resetGridState();
+
+		const pacInput = [];
+		const pelletInput = [];
 
 		const initialInputs: string[] = readline().split(' ');
 		this.myScore = parseInt(initialInputs[0]);
@@ -128,15 +159,7 @@ class GameState {
 			const speedTurnsLeft: number = parseInt(inputs[5]);
 			const abilityCooldown: number = parseInt(inputs[6]);
 
-			const pacInstance = new Pac(pacId, new Position(x, y), typeId, speedTurnsLeft, abilityCooldown);
-
-			if (mine) {
-				this.grid[y][x] = GRID_ELEMENTS.PAC;
-				this.myPacs.push(pacInstance);
-			} else {
-				this.grid[y][x] = GRID_ELEMENTS.ENEMY;
-				this.opponentPacs.push(pacInstance);
-			}
+			pacInput.push({ pacId, mine, x, y, typeId, speedTurnsLeft, abilityCooldown });
 		}
 
 		const visiblePelletCount: number = parseInt(readline());
@@ -146,42 +169,55 @@ class GameState {
 			const y: number = parseInt(inputs[1]);
 			const value: number = parseInt(inputs[2]);
 
-			const pelletInstance = new Pellet(new Position(x, y), value);
-			this.pellets.push(pelletInstance);
-
-			if (value === 10) {
-				this.universalGrid[y][x] = 10;
-				this.grid[y][x] = GRID_ELEMENTS.SUPER_PELLET;
-			} else {
-				this.universalGrid[y][x] = 2;
-				this.grid[y][x] = GRID_ELEMENTS.PELLET;
-			}
+			pelletInput.push({ x, y, value });
 		}
+
+		const findOrUpdatePac = (pacArray: Pac[], { pacId, x, y, typeId, speedTurnsLeft, abilityCooldown }) => {
+			const pacInstance = pacArray.find(pac => pac.id === pacId);
+			if (pacInstance) {
+				pacInstance.typeId = typeId;
+				pacInstance.pos = new Position(x, y);
+				pacInstance.speedTurnsLeft = speedTurnsLeft;
+				pacInstance.abilityCooldown = abilityCooldown;
+			} else {
+				pacArray.push(new Pac(pacId, new Position(x, y), typeId, speedTurnsLeft, abilityCooldown));
+			}
+		};
+
+		pacInput.forEach(({ mine, ...pacInfo }) => {
+			if (mine) {
+				findOrUpdatePac(this.pacs, pacInfo);
+			} else {
+				findOrUpdatePac(this.enemies, pacInfo);
+			}
+		});
+
+		this.pellets = pelletInput;
 
 		this.updateUniversalGrid();
 	}
 
 	updateUniversalGrid() {
 		// for each pac, go through visibility area and update grid
-		for (let pac of this.myPacs) {
-			for (let x = pac.pos.x; x < this.gridWidth; x++) {
-				if (this.grid[pac.pos.y][x] === GRID_ELEMENTS.EMPTY)
-					this.universalGrid[pac.pos.y][x] = 0;
+		for (let pac of this.pacs) {
+			for (let x = pac.pos.x; x < this.grid.width; x++) {
+				if (this.grid.get(new Position(x, pac.pos.y)) === Entities.EMPTY)
+					this.universalGrid.set(new Position(x, pac.pos.y), 0);
 			}
 
 			for (let x = pac.pos.x; x >= 0; x--) {
-				if (this.grid[pac.pos.y][x] === GRID_ELEMENTS.EMPTY)
-					this.universalGrid[pac.pos.y][x] = 0;
+				if (this.grid.get(new Position(x, pac.pos.y)) === Entities.EMPTY)
+					this.universalGrid.set(new Position(x, pac.pos.y), 0);
 			}
 
-			for (let y = pac.pos.y; y < this.gridHeight; y++) {
-				if (this.grid[y][pac.pos.x] === GRID_ELEMENTS.EMPTY)
-					this.universalGrid[y][pac.pos.x] = 0;
+			for (let y = pac.pos.y; y < this.grid.height; y++) {
+				if (this.grid.get(new Position(pac.pos.x, y)) === Entities.EMPTY)
+					this.universalGrid.set(new Position(pac.pos.x, y), 0);
 			}
 
 			for (let y = pac.pos.y; y >= 0; y--) {
-				if (this.grid[y][pac.pos.x] === GRID_ELEMENTS.EMPTY)
-					this.universalGrid[y][pac.pos.x] = 0;
+				if (this.grid.get(new Position(pac.pos.x, y)) === Entities.EMPTY)
+					this.universalGrid.set(new Position(pac.pos.x, y), 0);
 			}
 		}
 	}
@@ -194,99 +230,83 @@ class GameAI {
 		this.gameState = gameState;
 	}
 
-	debugGrid(uGrid = false) {
-		const { grid, universalGrid, gridWidth, gridHeight } = this.gameState;
-		let dGrid = uGrid ? universalGrid : grid;
-		for (let i = 0; i < gridHeight; i++) {
-			let row = '';
-			for (let j = 0; j < gridWidth; j++) {
-				row += dGrid[i][j];
-			}
-			console.error(row);
-		}
-	}
-
-	isPositionValid(pos: Position) {
-		return !(pos.x < 0 || pos.x >= this.gameState.gridWidth || pos.y < 0 || pos.y >= this.gameState.gridHeight);
-	}
-
 	initDistance(pacs: Pac[]) {
-		const { grid } = this.gameState;
-		const visited: { [y: number]: { [x: number]: { pacId: number, value: number } } } = {};
+		// const { grid } = this.gameState;
+		// const visited: { [y: number]: { [x: number]: { pacId: number, value: number } } } = {};
 
-		const queue: { pacId: number, pos: Position, value: number }[] = [];
-		pacs.forEach(pac => queue.push({ pacId: pac.id, pos: pac.pos, value: 0 }));
+		// const queue: { pacId: number, pos: Position, value: number }[] = [];
+		// pacs.forEach(pac => queue.push({ pacId: pac.id, pos: pac.pos, value: 0 }));
 
-		while (queue.length) {
-			let positions = queue.length;
-			while (positions--) {
-				const { pacId, value, pos } = queue.shift();
-				if (!this.isPositionValid(pos)) continue;
+		// while (queue.length) {
+		// 	let positions = queue.length;
+		// 	while (positions--) {
+		// 		const { pacId, value, pos } = queue.shift();
+		// 		if (!grid.checkBounds(pos)) continue;
 
-				if (visited[pos.y] && visited[pos.y][pos.x]) continue;
+		// 		if (visited[pos.y] && visited[pos.y][pos.x]) continue;
 
-				let newVal = value;
-				if (grid[pos.y][pos.x] === GRID_ELEMENTS.PELLET) newVal += 1;
-				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.SUPER_PELLET) newVal += 10;
-				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.ENEMY) newVal -= 10;
-				else if (grid[pos.y][pos.x] === GRID_ELEMENTS.PAC) newVal -= 10;
+		// 		let newVal = value;
+		// 		if (grid[pos.y][pos.x] === Entities.PELLET) newVal += 1;
+		// 		else if (grid[pos.y][pos.x] === Entities.SUPER_PELLET) newVal += 10;
+		// 		else if (grid[pos.y][pos.x] === Entities.ENEMY) newVal -= 10;
+		// 		else if (grid[pos.y][pos.x] === Entities.PAC) newVal -= 10;
 
-				if (!visited[pos.y]) visited[pos.y] = {};
-				visited[pos.y][pos.x] = { pacId, value };
+		// 		if (!visited[pos.y]) visited[pos.y] = {};
+		// 		visited[pos.y][pos.x] = { pacId, value };
 
-				const rightPos = new Position(pos.x + 1, pos.y);
-				const leftPos = new Position(pos.x - 1, pos.y);
-				const topPos = new Position(pos.x, pos.y - 1);
-				const bottomPos = new Position(pos.x, pos.y + 1);
+		// 		const rightPos = new Position(pos.x + 1, pos.y);
+		// 		const leftPos = new Position(pos.x - 1, pos.y);
+		// 		const topPos = new Position(pos.x, pos.y - 1);
+		// 		const bottomPos = new Position(pos.x, pos.y + 1);
 
-				if (![GRID_ELEMENTS.WALL].includes(grid[rightPos.y][rightPos.x])) {
-					queue.push({ pacId, pos: rightPos, value: newVal });
-				}
+		// 		if (![Entities.WALL].includes(grid[rightPos.y][rightPos.x])) {
+		// 			queue.push({ pacId, pos: rightPos, value: newVal });
+		// 		}
 
-				if (![GRID_ELEMENTS.WALL].includes(grid[leftPos.y][leftPos.x])) {
-					queue.push({ pacId, pos: leftPos, value: newVal });
-				}
+		// 		if (![Entities.WALL].includes(grid[leftPos.y][leftPos.x])) {
+		// 			queue.push({ pacId, pos: leftPos, value: newVal });
+		// 		}
 
-				if (![GRID_ELEMENTS.WALL].includes(grid[topPos.y][topPos.x])) {
-					queue.push({ pacId, pos: topPos, value: newVal });
-				}
+		// 		if (![Entities.WALL].includes(grid[topPos.y][topPos.x])) {
+		// 			queue.push({ pacId, pos: topPos, value: newVal });
+		// 		}
 
-				if (![GRID_ELEMENTS.WALL].includes(grid[bottomPos.y][bottomPos.x])) {
-					queue.push({ pacId, pos: bottomPos, value: newVal });
-				}
-			}
-		}
+		// 		if (![Entities.WALL].includes(grid[bottomPos.y][bottomPos.x])) {
+		// 			queue.push({ pacId, pos: bottomPos, value: newVal });
+		// 		}
+		// 	}
+		// }
 
-		const result: { value: number, pos: Position }[] = Array(pacs.length).fill(null);
-		for (let y in visited) {
-			let str = '';
-			for (let x in visited[y]) {
-				str += visited[y][x].value + ' ';
-				const { pacId, value } = visited[y][x];
-				if (!result[pacId]) {
-					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
-				} else if (result[pacId].value < value) {
-					result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
-				}
-			}
-			console.error(str);
-		}
+		// const result: { value: number, pos: Position }[] = Array(pacs.length).fill(null);
+		// for (let y in visited) {
+		// 	let str = '';
+		// 	for (let x in visited[y]) {
+		// 		str += visited[y][x].value + ' ';
+		// 		const { pacId, value } = visited[y][x];
+		// 		if (!result[pacId]) {
+		// 			result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
+		// 		} else if (result[pacId].value < value) {
+		// 			result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
+		// 		}
+		// 	}
+		// 	console.error(str);
+		// }
 
-		console.error(result);
-		return result;
+		// console.error(result);
+		// return result;
 	}
 
 	playNextMove() {
-		const { myPacs, pellets } = this.gameState;
+		const { pacs, pellets } = this.gameState;
 
-		const results = this.initDistance(myPacs);
+		const results = this.initDistance(pacs);
 
 		let output = '';
-		for (let i = 0; i < myPacs.length; i++) {
-			const pac = myPacs[i];
+		for (let i = 0; i < pacs.length; i++) {
+			const pac = pacs[i];
 
 			output += `MOVE ${pac.id} ${results[i].pos.x} ${results[i].pos.y}`;
-			if (i !== myPacs.length - 1) {
+			if (i !== pacs.length - 1) {
 				output += '|';
 			}
 		}
@@ -301,7 +321,6 @@ function RunGame() {
 
 	while (true) {
 		gameState.initGameState();
-		gameAI.debugGrid();
 		gameAI.playNextMove();
 	}
 
