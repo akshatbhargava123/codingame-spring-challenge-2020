@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <queue>
 
 using namespace std;
 
@@ -254,70 +255,82 @@ public:
         };
 
         // BFS lambda to encapsulate logic
-        function<int(Position, int)> BFS = [&](Position curPos, int depth = 0) -> int {
+        function<void(Position)> BFS = [&](Position curPos) {
             // if (depth > 15) return 1;
+            queue<pair<Position,int>> Q; // position, score
+            Q.push({ curPos, 0 });
 
-            // check if wall then return
-            if (getEntity(curPos) == '#') {
-                setVisited(curPos);
-                return -1000;
+            while (!Q.empty()) {
+                int size = Q.size();
+                while (size--) {
+                    auto [pos, score] = Q.front();
+                    Q.pop();
+
+                    if (visited[pos.y][pos.x]) continue;
+
+                    // check if wall then return
+                    if (getEntity(pos) == '#') {
+                        setVisited(pos);
+                        continue;
+                    }
+
+                    if (score > 8) continue;
+
+                    // if (score > 10) continue;
+
+                    // if (pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height) continue;
+
+                    // cerr << curPos.y << " " << curPos.x << "  " << universalGrid[curPos.y][curPos.x] << endl;
+
+                    // initialise all direction positions correctly
+                    Position tPos, bPos, rPos, lPos;
+
+                    if (pos.x == 0) lPos = Position{width - 1, pos.y};
+                    else lPos = Position{pos.x - 1, pos.y};
+
+                    if (pos.x == width - 1) rPos = Position{0, pos.y};
+                    else rPos = Position{pos.x + 1, pos.y};
+
+                    if (pos.y == 0) tPos = Position{pos.x, height - 1};
+                    else tPos = Position{pos.x, pos.y - 1};
+
+                    if (pos.y == height - 1) bPos = Position{pos.x, 0};
+                    else bPos = Position{pos.x, pos.y + 1};
+
+                    // TODO: think more on this: adding -1 as a cost to walk
+                    int newVal = score + universalGrid[pos.y][pos.x];
+                    setScore(pos, newVal);
+
+                    Q.push({ tPos, newVal });
+                    Q.push({ bPos, newVal });
+                    Q.push({ lPos, newVal });
+                    Q.push({ rPos, newVal });
+
+                    setVisited(pos);
+                }
             }
 
-            if (curPos.x < 0 || curPos.x >= width || curPos.y < 0 || curPos.y >= height) return -1000;
-
-            // initialise all direction positions correctly
-            Position tPos, bPos, rPos, lPos;
-
-            if (curPos.x == 0) lPos = Position{width - 1, curPos.y};
-            else lPos = Position{curPos.x - 1, curPos.y};
-
-            if (curPos.x == width - 1) rPos = Position{0, curPos.y};
-            else rPos = Position{curPos.x + 1, curPos.y};
-
-            if (curPos.y == 0) tPos = Position{curPos.x, height - 1};
-            else tPos = Position{curPos.x, curPos.y - 1};
-
-            if (curPos.y == height - 1) bPos = Position{curPos.x, 0};
-            else bPos = Position{curPos.x, curPos.y + 1};
-
-            // cerr << curPos.y << " " << curPos.x << "  " << universalGrid[curPos.y][curPos.x] << endl;
-
-            // TODO: think more on this: adding -1 as a cost to walk
-            int newVal = depth + universalGrid[curPos.y][curPos.x] + -1;
-            setScore(curPos, newVal);
-
-            if (visited[curPos.y][curPos.x]) return newVal;
-
-            setVisited(curPos);
-
-            int tVal = BFS(tPos, newVal);
-            int bVal = BFS(bPos, newVal);
-            int lVal = BFS(lPos, newVal);
-            int rVal = BFS(rPos, newVal);
-
-            return max({tVal, bVal, lVal, rVal});
         };
 
-        BFS(pac.pos, 0);
+        BFS(pac.pos);
 
         int bestScore = 0;
         Position bestPos = pac.pos;
-        cerr << pac.pacId << endl;
         for (int i = 0; i < height; i++) {
             for (int j = 0; j < width; j++) {
                 int score = scores[i][j];
-                cerr << score << " ";
+                // cerr << score << " ";
 
                 if (score > bestScore) {
                     bestScore = score;
                     bestPos = Position{j,i};
                 }
             }
-            cerr << endl;
+            // cerr << endl;
         }
 
-        cerr << endl << bestScore << endl;
-        cerr << bestPos.y << " " << bestPos.x << endl;
+        cerr << "id: " << pac.pacId << " score: " << bestScore << endl;
+        cerr << bestPos.x << " " << bestPos.y << endl << endl;
 
         return bestPos;
     }
@@ -333,13 +346,18 @@ public:
         {
             Pac &pac = pacs[i];
 
-            // if SPEED ability available, just use it
-            if (pac.isAbilityAvailable()) {
-                cout << "SPEED " << pac.pacId;
+            if (false && i > 0) {
+                cout << "MOVE " << pac.pacId << " " << pac.pos.x << " " << pac.pos.y;
             } else {
-                Position pos = this->getBestMovePosition(pac);
-                cout << "MOVE " << pac.pacId << " " << pos.x << " " << pos.y;
+                // if SPEED ability available, just use it
+                if (pac.isAbilityAvailable()) {
+                    cout << "SPEED " << pac.pacId;
+                } else {
+                    Position pos = this->getBestMovePosition(pac);
+                    cout << "MOVE " << pac.pacId << " " << pos.x << " " << pos.y;
+                }
             }
+
 
             if (i != pacs.size() - 1)
                 cout << "|";
