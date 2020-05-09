@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <queue>
+#include <tuple>
 
 using namespace std;
 
@@ -73,6 +74,19 @@ public:
         }
 
         this->grid = tempGrid;
+
+        vector<vector<int>> tempUniversalGrid(height, vector<int>(width, 0));
+        for (int i = 0; i < height; i++)
+        {
+            for (int j = 0; j < width; j++)
+            {
+                if (grid[i][j] == ' ')
+                    tempUniversalGrid[i][j] = 1;
+                // else if (grid[i][j] == '#')
+                //     tempGrid[i][j] = 0;
+            }
+        }
+        this->universalGrid = tempUniversalGrid;
     }
 
     void removeStateFromGrid()
@@ -90,16 +104,6 @@ public:
     void initUniversalGrid()
     {
         vector<vector<int>> tempGrid(height, vector<int>(width, 0));
-        for (int i = 0; i < height; i++)
-        {
-            for (int j = 0; j < width; j++)
-            {
-                if (grid[i][j] == ' ')
-                    tempGrid[i][j] = 1;
-                // else if (grid[i][j] == '#')
-                //     tempGrid[i][j] = 0;
-            }
-        }
 
         auto initIndex = [](int posx, int posy, auto &tempGrid, auto &grid) {
             if (grid[posy][posx] == ' ')
@@ -232,13 +236,13 @@ public:
         }
     }
 
-    Position getBestMovePosition(Pac pac) {
+    Position getBestMovePosition(Pac pac, vector<vector<int>> &universalGridCopy) {
         const Position pos = pac.pos;
         const int width = this->gameState->width;
         const int height = this->gameState->height;
 
         const auto grid = this->gameState->grid;
-        const auto universalGrid = this->gameState->universalGrid;
+        auto universalGrid = universalGridCopy;
         vector<vector<int>> scores(height, vector<int>(width, 0));
         vector<vector<bool>> visited(height, vector<bool>(width, false));
 
@@ -254,16 +258,18 @@ public:
             visited[pos.y][pos.x] = true;
         };
 
+        Position superBestPos;
+
         // BFS lambda to encapsulate logic
         function<void(Position)> BFS = [&](Position curPos) {
             // if (depth > 15) return 1;
-            queue<pair<Position,int>> Q; // position, score
-            Q.push({ curPos, 0 });
+            queue<tuple<Position,int,int>> Q; // position, score, depth
+            Q.push({ curPos, 0, 0 });
 
             while (!Q.empty()) {
                 int size = Q.size();
                 while (size--) {
-                    auto [pos, score] = Q.front();
+                    auto [pos, score, depth] = Q.front();
                     Q.pop();
 
                     if (visited[pos.y][pos.x]) continue;
@@ -274,13 +280,7 @@ public:
                         continue;
                     }
 
-                    if (score > 8) continue;
-
-                    // if (score > 10) continue;
-
                     // if (pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height) continue;
-
-                    // cerr << curPos.y << " " << curPos.x << "  " << universalGrid[curPos.y][curPos.x] << endl;
 
                     // initialise all direction positions correctly
                     Position tPos, bPos, rPos, lPos;
@@ -300,11 +300,12 @@ public:
                     // TODO: think more on this: adding -1 as a cost to walk
                     int newVal = score + universalGrid[pos.y][pos.x];
                     setScore(pos, newVal);
+                    universalGrid[pos.y][pos.x] = -1000;
 
-                    Q.push({ tPos, newVal });
-                    Q.push({ bPos, newVal });
-                    Q.push({ lPos, newVal });
-                    Q.push({ rPos, newVal });
+                    Q.push({ tPos, newVal, depth + 1 });
+                    Q.push({ bPos, newVal, depth + 1 });
+                    Q.push({ lPos, newVal, depth + 1 });
+                    Q.push({ rPos, newVal, depth + 1 });
 
                     setVisited(pos);
                 }
@@ -329,8 +330,8 @@ public:
             // cerr << endl;
         }
 
-        cerr << "id: " << pac.pacId << " score: " << bestScore << endl;
-        cerr << bestPos.x << " " << bestPos.y << endl << endl;
+        // cerr << "id: " << pac.pacId << " score: " << bestScore << endl;
+        // cerr << bestPos.x << " " << bestPos.y << endl << endl;
 
         return bestPos;
     }
@@ -339,22 +340,29 @@ public:
     {
         vector<Pac> &pacs = gameState->pacs;
         vector<Pellet> &pellets = gameState->pellets;
-        sort(pellets.begin(), pellets.end(), [](Pellet p1, Pellet p2) {
-            return p1.value > p2.value;
-        });
+
+        vector<vector<int>> universalGridCopy = this->gameState->universalGrid;
+
+        vector<Position> targets;
         for (int i = 0; i < pacs.size(); i++)
         {
             Pac &pac = pacs[i];
 
             if (false && i > 0) {
+                // for debugging
                 cout << "MOVE " << pac.pacId << " " << pac.pos.x << " " << pac.pos.y;
             } else {
                 // if SPEED ability available, just use it
                 if (pac.isAbilityAvailable()) {
                     cout << "SPEED " << pac.pacId;
                 } else {
-                    Position pos = this->getBestMovePosition(pac);
-                    cout << "MOVE " << pac.pacId << " " << pos.x << " " << pos.y;
+                    Position pos = this->getBestMovePosition(pac, universalGridCopy);
+                    if (find(targets.begin(), targets.end(), pos) != targets.end()) {
+                        cout << "MOVE " << pac.pacId << " " << pac.pos.x << " " << pac.pos.y;
+                    } else {
+                        cout << "MOVE " << pac.pacId << " " << pos.x << " " << pos.y;
+                    }
+                    targets.push_back(pos);
                 }
             }
 
