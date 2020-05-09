@@ -1,4 +1,4 @@
-// const readline = () => '';
+const readline = () => '';
 
 const Entities = {
 	EMPTY: ' ',
@@ -102,7 +102,7 @@ class Grid<T> {
 			}
 			console.error(outputStr);
 		}
-		console.error('\n');
+		console.error('\n\n');
 	}
 };
 
@@ -177,6 +177,8 @@ class GameState {
 			const value: number = parseInt(inputs[2]);
 
 			pelletInput.push({ x, y, value });
+			this.grid.set(new Position(x, y), value === 10 ? 'O' : 'o');
+			this.universalGrid.set(new Position(x, y), value);
 		}
 
 		const createOrUpdatePac = (pacArray: Array<Pac>, { pacId, x, y, typeId, speedTurnsLeft, abilityCooldown }) => {
@@ -197,6 +199,9 @@ class GameState {
 			} else {
 				createOrUpdatePac(this.enemies, pacInfo);
 			}
+
+			this.grid.set(new Position(pacInfo.x, pacInfo.y), mine ? 'P' : 'E');
+			this.universalGrid.set(new Position(pacInfo.x, pacInfo.y), -5);
 		});
 
 		const updateDeadStatus = (pacArray: Array<Pac>, pacInput: any[]) => {
@@ -220,6 +225,9 @@ class GameState {
 
 	updateUniversalGrid() {
 		// for each pac, go through visibility area and update grid
+
+		
+
 		for (let pac of this.pacs) {
 			for (let x = pac.pos.x; x < this.grid.width; x++) {
 				if (this.grid.get(new Position(x, pac.pos.y)) === Entities.EMPTY)
@@ -253,70 +261,72 @@ class GameAI {
 		this.gameState = gameState;
 	}
 
-	initDistance(pacs: Pac[]) {
-		// const { grid } = this.gameState;
-		// const visited: { [y: number]: { [x: number]: { pacId: number, value: number } } } = {};
+	getBestMove(pac: Pac): Position {
+		const { grid, universalGrid } = this.gameState;
+		const scores = new Grid<number>(grid.width, grid.height, 0);
+		const visited = new Grid<boolean>(grid.width, grid.height, false);
 
-		// const queue: { pacId: number, pos: Position, value: number }[] = [];
-		// pacs.forEach(pac => queue.push({ pacId: pac.id, pos: pac.pos, value: 0 }));
+		const setScore = (pos: Position, value: number) => {
+			if (value > scores.get(pos)) {
+				scores.set(pos, value);
+			}
+		};
 
-		// while (queue.length) {
-		// 	let positions = queue.length;
-		// 	while (positions--) {
-		// 		const { pacId, value, pos } = queue.shift();
-		// 		if (!grid.checkBounds(pos)) continue;
+		const BFS = (initialPos: Position) => {
+			let Q: { pos: Position, score: number }[] = [];
+			Q.push({ pos: { ...initialPos }, score: 0 });
 
-		// 		if (visited[pos.y] && visited[pos.y][pos.x]) continue;
+			while (Q.length) {
+				let size = Q.length;
+				while (size--) {
+					const { pos, score } = Q.shift();
 
-		// 		let newVal = value;
-		// 		if (grid[pos.y][pos.x] === Entities.PELLET) newVal += 1;
-		// 		else if (grid[pos.y][pos.x] === Entities.SUPER_PELLET) newVal += 10;
-		// 		else if (grid[pos.y][pos.x] === Entities.ENEMY) newVal -= 10;
-		// 		else if (grid[pos.y][pos.x] === Entities.PAC) newVal -= 10;
+					if (visited.get(pos)) continue;
+					if (grid.get(pos) === Entities.WALL) continue;
 
-		// 		if (!visited[pos.y]) visited[pos.y] = {};
-		// 		visited[pos.y][pos.x] = { pacId, value };
+					let tPos: Position, bPos: Position, rPos: Position, lPos: Position;
+					if (pos.x == 0) lPos = new Position(grid.width - 1, pos.y);
+					else lPos = new Position(pos.x - 1, pos.y);
 
-		// 		const rightPos = new Position(pos.x + 1, pos.y);
-		// 		const leftPos = new Position(pos.x - 1, pos.y);
-		// 		const topPos = new Position(pos.x, pos.y - 1);
-		// 		const bottomPos = new Position(pos.x, pos.y + 1);
+					if (pos.x == grid.width - 1) rPos = new Position(0, pos.y);
+					else rPos = new Position(pos.x + 1, pos.y);
 
-		// 		if (![Entities.WALL].includes(grid[rightPos.y][rightPos.x])) {
-		// 			queue.push({ pacId, pos: rightPos, value: newVal });
-		// 		}
+					if (pos.y == 0) tPos = new Position(pos.x, grid.height - 1);
+					else tPos = new Position(pos.x, pos.y - 1);
 
-		// 		if (![Entities.WALL].includes(grid[leftPos.y][leftPos.x])) {
-		// 			queue.push({ pacId, pos: leftPos, value: newVal });
-		// 		}
+					if (pos.y == grid.height - 1) bPos = new Position(pos.x, 0);
+					else bPos = new Position(pos.x, pos.y + 1);
 
-		// 		if (![Entities.WALL].includes(grid[topPos.y][topPos.x])) {
-		// 			queue.push({ pacId, pos: topPos, value: newVal });
-		// 		}
+					// TODO: think more on this: adding -1 as a cost to walk
+					let newVal: number = score + universalGrid.get(pos);
+					setScore(pos, newVal);
 
-		// 		if (![Entities.WALL].includes(grid[bottomPos.y][bottomPos.x])) {
-		// 			queue.push({ pacId, pos: bottomPos, value: newVal });
-		// 		}
-		// 	}
-		// }
+					Q.push({ pos: tPos, score: newVal });
+					Q.push({ pos: bPos, score: newVal });
+					Q.push({ pos: lPos, score: newVal });
+					Q.push({ pos: rPos, score: newVal });
 
-		// const result: { value: number, pos: Position }[] = Array(pacs.length).fill(null);
-		// for (let y in visited) {
-		// 	let str = '';
-		// 	for (let x in visited[y]) {
-		// 		str += visited[y][x].value + ' ';
-		// 		const { pacId, value } = visited[y][x];
-		// 		if (!result[pacId]) {
-		// 			result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
-		// 		} else if (result[pacId].value < value) {
-		// 			result[pacId] = { value, pos: new Position(Number(x), Number(y)) };
-		// 		}
-		// 	}
-		// 	console.error(str);
-		// }
+					visited.set(pos, true);
+				}
+			};
+		};
 
-		// console.error(result);
-		// return result;
+		BFS(pac.pos);
+
+		let bestScore: number = -1000, bestPos: Position = pac.pos;
+		for (let y = 0; y < grid.height; y++) {
+			for (let x = 0; x < grid.width; x++) {
+				const pos = new Position(x, y);
+				if (scores.get(pos) > bestScore) {
+					bestScore = scores.get(pos);
+					bestPos = pos;
+				}
+			}
+		}
+
+		scores.debug();
+
+		return bestPos;
 	}
 
 	playNextMove() {
@@ -328,7 +338,11 @@ class GameAI {
 			const pac = alivePacs[i];
 			if (pac.isDead) continue;
 
-			output += (`MOVE ${pac.id} 15 0`);
+			console.error(`FUCKER ${pac.id}: ${pac.isDead}`);
+
+			const pos = this.getBestMove(pac);
+
+			output += (`MOVE ${pac.id} ${pos.x} ${pos.y}`);
 			if (i !== alivePacs.length - 1) {
 				output += '|';
 			}
