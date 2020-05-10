@@ -26,6 +26,10 @@ class Position {
 		this.x = x;
 		this.y = y;
 	}
+
+	isEqual(pos: Position) {
+		return this.x === pos.x && this.y === pos.y;
+	}
 };
 
 class Pac {
@@ -35,6 +39,7 @@ class Pac {
 	speedTurnsLeft: number;
 	abilityCooldown: number;
 	isDead: boolean;
+	target: { pos: Position, score: number };
 
 	constructor(id: number, pos: Position, _typeId: string, _speedTurnsLeft: number, _abilityCooldown: number) {
 		this.id = id;
@@ -95,6 +100,26 @@ class Grid<T> {
 		return !(pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height);
 	}
 
+	getNeighbours(pos: Position) {
+		const neighbours: Position[] = [];
+		let tPos: Position, bPos: Position, rPos: Position, lPos: Position;
+
+		if (pos.x === 0) lPos = new Position(this.width - 1, pos.y);
+		else lPos = new Position(pos.x - 1, pos.y);
+
+		if (pos.x === this.width - 1) rPos = new Position(0, pos.y);
+		else rPos = new Position(pos.x + 1, pos.y);
+
+		if (pos.y === 0) tPos = new Position(pos.x, this.height - 1);
+		else tPos = new Position(pos.x, pos.y - 1);
+
+		if (pos.y === this.height - 1) bPos = new Position(pos.x, 0);
+		else bPos = new Position(pos.x, pos.y + 1);
+
+		neighbours.push(tPos, bPos, lPos, rPos);
+		return neighbours;
+	}
+
 	debug() {
 		for (let row of this.grid) {
 			let outputStr = '';
@@ -146,7 +171,7 @@ class GameState {
 				if (this.grid.get(new Position(x, y)) !== Entities.WALL) {
 					this.grid.set(new Position(x, y), Entities.EMPTY);
 				} else {
-					this.universalGrid.set(new Position(x, y), 0);
+					this.universalGrid.set(new Position(x, y), -10);
 				}
 			}
 		}
@@ -208,7 +233,7 @@ class GameState {
 			}
 
 			this.grid.set(new Position(pacInfo.x, pacInfo.y), mine ? 'P' : 'E');
-			this.universalGrid.set(new Position(pacInfo.x, pacInfo.y), -5);
+			this.universalGrid.set(new Position(pacInfo.x, pacInfo.y), -2);
 		});
 
 		const updateDeadStatus = (pacArray: Array<Pac>, pacInput: any[]) => {
@@ -217,7 +242,7 @@ class GameState {
 				const found = pacInput.filter(p => p.pacId === pac.id).length > 0;
 				if (!found) {
 					pac.isDead = true;
-					console.error(`${pac.id} not found in input, turning dead.`);
+					// console.error(`${pac.id} not found in input, turning dead.`);
 				}
 			});
 		};
@@ -225,7 +250,7 @@ class GameState {
 		updateDeadStatus(this.pacs, pacInput.filter(p => p.mine));
 		// updateDeadStatus(this.enemies, pacInput);
 
-		this.pellets = pelletInput;
+		this.pellets = pelletInput.map(p => new Pellet(new Position(p.x, p.y), p.value));
 
 		// console.error(this.pacs);
 		// console.error(this.enemies);
@@ -271,6 +296,57 @@ class GameState {
 	}
 };
 
+interface GameAction {
+	type: 'MOVE' | 'SWITCH' | 'SPEED';
+	into?: 'ROCK' | 'PAPER' | 'SCISSORS';
+	pos?: Position;
+};
+class Solution {
+
+	gameAi: GameAI;
+
+	constructor(gameAi: GameAI) {
+		this.gameAi = gameAi;
+	}
+
+	private getPossibleActionsForPac(pac: Pac) {
+		const { pellets } = this.gameAi.gameState;
+
+		const actions: GameAction[] = [];
+		if (!pac.abilityCooldown) {
+			actions.push({ type: 'SPEED' });
+			actions.push({ type: 'SWITCH', into: 'ROCK' });
+			actions.push({ type: 'SWITCH', into: 'PAPER' });
+			actions.push({ type: 'SWITCH', into: 'SCISSORS' });
+		}
+
+		for (let i = 0; i < Math.min(pellets.length, 5); i++) {
+			const index = Math.floor(Math.random() * pellets.length);
+			actions.push({ type: 'MOVE', pos: pellets[index].pos });
+		}
+
+		return actions;
+	}
+
+	private generateMoves() {
+		const { pacs } = this.gameAi.gameState;
+		const alivePacs = pacs.filter(pac => !pac.isDead);
+		for (let i = 0; i < pacs.length; i++) {
+			const pac = pacs[i];
+			const actions = this.getPossibleActionsForPac(pac);
+			console.error(actions);
+		}
+	}
+
+	private applyMovesAndEvalutate() {
+	
+	}
+
+	randomizeAndEvaluate() {
+		this.generateMoves();
+	}
+}
+
 class GameAI {
 	gameState: GameState;
 
@@ -278,10 +354,11 @@ class GameAI {
 		this.gameState = gameState;
 	}
 
-	getBestMove(pac: Pac): Position {
-		const { grid, universalGrid } = this.gameState;
-		const scores = new Grid<number>(grid.width, grid.height, 0);
-		const distances = new Grid<number>(grid.width, grid.height, 0);
+	initPacTarget(pac: Pac, gridCopy: Grid<string>) {
+		const { universalGrid } = this.gameState;
+		const grid = gridCopy;
+		const scores = new Grid<number>(grid.width, grid.height, -Infinity);
+		const distances = new Grid<number>(grid.width, grid.height, Infinity);
 		const visited = new Grid<boolean>(grid.width, grid.height, false);
 
 		const setScore = (pos: Position, value: number) => {
@@ -291,14 +368,14 @@ class GameAI {
 		};
 		
 		const setDistance = (pos: Position, value: number) => {
-			if (value > distances.get(pos)) {
+			// if (value > distances.get(pos)) {
 				distances.set(pos, value);
-			}
+			// }
 		};
 
 		const BFS = (initialPos: Position) => {
 			let Q: { pos: Position, score: number, distance: number }[] = [];
-			Q.push({ pos: { ...initialPos }, score: 0, distance: 0 });
+			Q.push({ pos: new Position(initialPos.x, initialPos.y), score: 0, distance: 0 });
 
 			while (Q.length) {
 				let size = Q.length;
@@ -308,28 +385,16 @@ class GameAI {
 					if (visited.get(pos)) continue;
 					if (grid.get(pos) === Entities.WALL) continue;
 
-					let tPos: Position, bPos: Position, rPos: Position, lPos: Position;
-					if (pos.x == 0) lPos = new Position(grid.width - 1, pos.y);
-					else lPos = new Position(pos.x - 1, pos.y);
-
-					if (pos.x == grid.width - 1) rPos = new Position(0, pos.y);
-					else rPos = new Position(pos.x + 1, pos.y);
-
-					if (pos.y == 0) tPos = new Position(pos.x, grid.height - 1);
-					else tPos = new Position(pos.x, pos.y - 1);
-
-					if (pos.y == grid.height - 1) bPos = new Position(pos.x, 0);
-					else bPos = new Position(pos.x, pos.y + 1);
+					const neighbours = grid.getNeighbours(pos);
 
 					// TODO: think more on this: adding -1 as a cost to walk
 					let newVal: number = score + universalGrid.get(pos);
 					setScore(pos, newVal);
 					setDistance(pos, distance);
 
-					Q.push({ pos: tPos, score: newVal, distance: distance + 1 });
-					Q.push({ pos: bPos, score: newVal, distance: distance + 1 });
-					Q.push({ pos: lPos, score: newVal, distance: distance + 1 });
-					Q.push({ pos: rPos, score: newVal, distance: distance + 1 });
+					for (const neighbour of neighbours) {
+						Q.push({ pos: neighbour, score: newVal, distance: distance + 1 });
+					}
 
 					visited.set(pos, true);
 				}
@@ -338,41 +403,56 @@ class GameAI {
 
 		BFS(pac.pos);
 
-		let bestScore: number = -1000, bestPos: Position = pac.pos;
+
+		const moves: { score: number, pos: Position }[] = [];
+		// let bestScore: number = -1000, bestPos: Position = pac.pos;
 		for (let y = 0; y < grid.height; y++) {
 			for (let x = 0; x < grid.width; x++) {
 				const pos = new Position(x, y);
 				let distance = distances.get(pos), profit = scores.get(pos);
-				const score = profit - distance;
-				if (score > bestScore) {
-					bestScore = score;
-					bestPos = pos;
-				}
+				const score = profit - (distance * 0.3);
+				moves.push({ score, pos });
 			}
 		}
 
-		// universalGrid.debug();
-		// scores.debug();
+		const sortedMoves = moves.sort((m1, m2) => {
+			return m1.score > m2.score ? -1 : 1;
+		}).slice(0, 3);
 
-		// console.error(`${bestPos.x} ${bestPos.y}, elem: ${grid.get(bestPos)}, score: ${bestScore}`);
+		const randIndex = 0; //Math.floor(Math.random() * sortedMoves.length);
+		const bestMove = sortedMoves[randIndex];
 
-		return bestPos;
+		universalGrid.debug();
+		distances.debug();
+		scores.debug();
+
+		if (!pac.target) pac.target = { score: bestMove.score, pos: bestMove.pos };
+		else if (bestMove.score - pac.target.score > 5) {
+			pac.target = { score: bestMove.score, pos: bestMove.pos };
+		}
 	}
 
 	playNextMove() {
 		const { pacs, pellets } = this.gameState;
 		const alivePacs = pacs.filter(pac => !pac.isDead);
 
+		// reset targets if already reached
+		alivePacs.forEach(pac => {
+			if (pac.target && pac.pos.isEqual(pac.target.pos)) {
+				pac.target = null;
+			}
+		});
+
+		const gridCopy = this.gameState.grid.copy();
+
 		let output = '';
 		for (let i = 0; i < alivePacs.length; i++) {
 			const pac = alivePacs[i];
 			if (pac.isDead) continue;
 
-			console.error(`FUCKER ${pac.id}: ${pac.isDead}`);
-
-			const pos = this.getBestMove(pac);
-
-			output += (`MOVE ${pac.id} ${pos.x} ${pos.y}`);
+			this.initPacTarget(pac, gridCopy);
+			console.error(`${pac.id}: ${pac.target.pos.x} ${pac.target.pos.y}`);
+			output += (`MOVE ${pac.id} ${pac.target.pos.x} ${pac.target.pos.y}`);
 			if (i !== alivePacs.length - 1) {
 				output += '|';
 			}
@@ -390,6 +470,8 @@ function RunGame() {
 	while (true) {
 		gameState.initGameState();
 		gameAI.playNextMove();
+		// const sol = new Solution(gameAI);
+		// sol.randomizeAndEvaluate();
 	}
 
 }
