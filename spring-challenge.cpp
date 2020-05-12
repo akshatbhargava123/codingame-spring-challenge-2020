@@ -7,6 +7,13 @@
 
 using namespace std;
 
+const char WALL = '#';
+const char EMPTY = ' ';
+const char SUPER_PELLET = 'O';
+const char PELLET = 'o';
+const char ENEMY = 'E';
+const char PAC = 'P';
+
 struct Position
 {
     int x;
@@ -19,11 +26,12 @@ struct Position
 
 struct Pac
 {
-    int pacId;           // pac number (unique within a team)
-    Position pos;        // position of pac in grid
-    string typeId;       // unused in wood leagues
-    int speedTurnsLeft;  // unused in wood leagues
-    int abilityCooldown; // unused in wood leagues
+    int pacId;
+    Position pos;
+    string typeId;
+    int speedTurnsLeft;
+    int abilityCooldown;
+    bool isDead = false;
 
     bool isAbilityAvailable() {
         return abilityCooldown == 0;
@@ -32,12 +40,66 @@ struct Pac
 
 struct Pellet
 {
-    Position pos; // pellet position in grid
-    int value;    // amount of points this pellet is worth
+    Position pos;
+    int value;
 
     bool isSuper() {
         return value == 10;
     }
+};
+
+template<typename T>
+class Grid {
+public:
+    int width;
+    int height;
+    vector<vector<T>> grid;
+
+    Grid(int _width, int _height, T defaultValue) {
+        width = _width;
+        height = _height;
+        for (int i = 0; i < height; i++) {
+            grid.resize(grid.size() + 1);
+            for (int j = 0; j < width; j++) {
+                grid[i].push_back(defaultValue);
+            }
+        }
+    }
+
+    T get(Position pos) const {
+        return grid[pos.y][pos.x];
+    }
+
+    void set(Position pos, T value) {
+        grid[pos.y][pos.x] = value;
+    }
+
+    bool checkBounds(Position pos) {
+		return !(pos.x < 0 || pos.x >= width || pos.y < 0 || pos.y >= height);
+	}
+
+    vector<Position> getNeighbours(Position pos) {
+		vector<Position> neighbours;
+		Position tPos, bPos, rPos, lPos;
+
+		if (pos.x === 0) lPos = Position(width - 1, pos.y);
+		else lPos = Position(pos.x - 1, pos.y);
+
+		if (pos.x === width - 1) rPos = Position(0, pos.y);
+		else rPos = Position(pos.x + 1, pos.y);
+
+		if (pos.y === 0) tPos = Position(pos.x, height - 1);
+		else tPos = Position(pos.x, pos.y - 1);
+
+		if (pos.y === height - 1) bPos = Position(pos.x, 0);
+		else bPos = Position(pos.x, pos.y + 1);
+
+		neighbours.push_back(tPos);
+        neighbours.push_back(bPos);
+        neighbours.push_back(lPos);
+        neighbours.push_back(rPos);
+		return neighbours;
+	}
 };
 
 // TODO: Universal Grid cannot yet differentiate between WALL and EMPTY, maybe merge it with GRID in future
@@ -61,7 +123,7 @@ public:
         cin >> width >> height;
         cin.ignore();
 
-        vector<vector<char>> tempGrid(height, vector<char>(width, ' '));
+        Grid<char> grid = Grid<int>(width, height, '');
 
         for (int i = 0; i < height; i++)
         {
